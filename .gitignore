@@ -1,1 +1,17 @@
+# External dataset symlink (ignore the link itself, not just a directory).
 /data
+
+# Local Python environments and execution dependencies.
+.venv/
+/train/.embedding_runtime/
+__pycache__/
+*.py[cod]
+
+# Generated embedding caches, weights and extraction outputs.
+*.h5
+*.h5.partial
+*.h5.lock
+*.pt
+*.pth
+*.safetensors
+*.log

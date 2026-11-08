@@ -14,10 +14,10 @@ python train/extract_all_wsi.py \
   --raw /ruta/al/dataset/data/raw \
   --snapshot /ruta/al/snapshot/hibou-L \
   --output /ruta/a/embeddings/10x \
-  --mpp 0.9701389525095192 --gpus 0,1,2 --dry-run
+  --level 1 --gpus 0,1,2 --dry-run
 ```
 
-Quitar `--dry-run` para ejecutar la extracción. La entrada contiene `images/**/*.tif` y `tissue_masks/<nombre>_tissue.tif`. La MPP del ejemplo corresponde al ≈10× nativo de OWL; para 20× usar `--mpp 0.5` y otra carpeta de salida.
+Quitar `--dry-run` para ejecutar la extracción. La entrada contiene `images/**/*.tif` y `tissue_masks/<nombre>_tissue.tif`. `--level 1` es el valor por defecto y corresponde al ≈10× nativo de estas WSI de OWL.
 
 Por defecto: parches de 224 × 224, stride 224, mínimo 5 % de tejido, lote 1.024 y ocho lectores por GPU. Se ajustan con `--stride`, `--min-tissue`, `--batch-size` y `--workers`. `--dry-run` revisa el inventario sin escribir ni lanzar la extracción.
 

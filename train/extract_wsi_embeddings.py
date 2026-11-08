@@ -36,24 +36,30 @@ def starts(length, size, stride):
     return np.unique([*range(0, length - size + 1, stride), length - size])
 
 
+def resolution(slide, level):
+    if not 0 <= level < len(slide.level_downsamples):
+        raise ValueError(
+            f"OpenSlide level {level} is unavailable; choose 0–{len(slide.level_downsamples) - 1}"
+        )
+    mx, my = [float(slide.properties[f"openslide.mpp-{axis}"]) for axis in ("x", "y")]
+    down = slide.level_downsamples[level]
+    if not all(math.isfinite(v) and v > 0 for v in (mx, my, down)):
+        raise ValueError("Invalid native MPP or level downsample")
+    return mx, my, down
+
+
 def plan(args):
     with openslide.OpenSlide(str(args.wsi)) as slide:
         width, height = slide.dimensions
-        mx, my = [float(slide.properties[f"openslide.mpp-{axis}"]) for axis in ("x", "y")]
-        if not all(math.isfinite(v) and v > 0 for v in (mx, my)):
-            raise ValueError("Invalid native MPP")
-        if args.mpp < max(mx, my) * 0.95:
-            raise ValueError("Requested MPP would substantially upsample the source")
-        fw, fh = round(224 * args.mpp / mx), round(224 * args.mpp / my)
-        sx, sy = round(args.stride * args.mpp / mx), round(args.stride * args.mpp / my)
-        level = slide.get_best_level_for_downsample(args.mpp / max(mx, my))
-        down = slide.level_downsamples[level]
+        mx, my, down = resolution(slide, args.level)
+        fw = fh = round(224 * down)
+        sx = sy = round(args.stride * down)
         geometry = dict(
             wsi_dimensions=[width, height],
             native_mpp=[mx, my],
             footprint_level0=[fw, fh],
             effective_mpp=[fw * mx / 224, fh * my / 224],
-            read_level=level,
+            read_level=args.level,
             read_size=[max(1, round(fw / down)), max(1, round(fh / down))],
             mask_mapping="same full-slide extent, origin (0,0), no rotation",
             edge_policy="append last full patch aligned to each edge",
@@ -117,6 +123,8 @@ def sdpa_forward(self, hidden_states, head_mask=None, output_attentions=False):
 
 
 def contract(args, geometry=None, amp=None):
+    with openslide.OpenSlide(str(args.wsi)) as slide:
+        mx, my, down = resolution(slide, args.level)
     result = dict(
         schema_version=1,
         encoder="histai/hibou-L",
@@ -129,7 +137,7 @@ def contract(args, geometry=None, amp=None):
             (args.encoder_snapshot / "config.json").read_bytes()
         ).hexdigest(),
         pooling=POOLING,
-        target_mpp=args.mpp,
+        target_mpp=max(mx, my) * down,
         patch_size=224,
         stride=args.stride,
         min_tissue=args.min_tissue,
@@ -275,7 +283,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for flag in ("wsi", "mask", "encoder-snapshot", "output"):
         parser.add_argument("--" + flag, type=Path, required=True)
-    parser.add_argument("--mpp", type=float, default=0.5)
+    parser.add_argument("--level", type=int, default=1, help="Native OpenSlide level (default: 1)")
     parser.add_argument("--stride", type=int, default=224)
     parser.add_argument("--min-tissue", type=float, default=0.05)
     parser.add_argument("--batch-size", type=int, default=1024)
@@ -284,8 +292,7 @@ def main():
     parser.add_argument("--plan-only", action="store_true")
     args = parser.parse_args()
     if (
-        not math.isfinite(args.mpp)
-        or args.mpp <= 0
+        args.level < 0
         or args.stride < 1
         or not 0 < args.min_tissue <= 1
         or args.batch_size < 1

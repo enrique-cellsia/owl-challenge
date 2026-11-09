@@ -13,6 +13,7 @@ from pathlib import Path
 import random
 import shutil
 import time
+import warnings
 
 import h5py
 import numpy as np
@@ -242,7 +243,12 @@ def main():
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.set_num_threads(4)
-    torch.use_deterministic_algorithms(True)
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    warnings.filterwarnings(
+        "ignore",
+        message=r"cumsum_cuda_kernel does not have a deterministic implementation.*",
+        category=UserWarning,
+    )
     device = torch.device(args.device)
     if device.type == "cuda":
         torch.cuda.manual_seed_all(args.seed)

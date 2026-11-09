@@ -58,3 +58,15 @@ La base es MIL con atención y cuatro probabilidades condicionales de recaída, 
 `--input-dim`, `--hidden-dim`, `--bins`, `--pooling attention|mean`, `--dropout`, `--lr`, `--weight-decay`, `--accumulation` y `--seed` permiten variar el modelo y el entrenamiento. Para otro encoder, indicar su carpeta de HDF5 y su dimensión con `--input-dim`.
 
 Los splits y los experimentos se agrupan en `data/training/`, dentro del almacenamiento externo ignorado por Git. Los experimentos quedan en `data/training/experiments/`. Cada ejecución requiere una carpeta nueva y conserva configuración, copia de split/etiquetas/código, `metrics.csv`, predicciones de validación y **todos** los checkpoints por época (modelo y optimizador). No selecciona `best` ni carga embeddings o evalúa pacientes de test. Los TXT de split quedan en `data/training/splits/`. Todos los artefactos persistentes generados (splits, embeddings, checkpoints, métricas, predicciones y cachés de ejecución) se guardan bajo `data/`, la carpeta montada, y quedan fuera de Git.
+
+## Evaluación en test
+
+Elegir el checkpoint usando validación y pasarlo explícitamente:
+
+```bash
+python train/evaluate_test.py \
+  --checkpoint data/training/experiments/hibou_l_10x_mil_20261109_094734/checkpoints/epoch_002.pt \
+  --device cuda:0 --cache-in-ram
+```
+
+Reutiliza etiquetas, split, arquitectura y cortes temporales guardados. Escribe pérdida, C-index de Harrell (con IC del 95 % calculado por bootstrap de pacientes) y predicciones en `<experimento>/test/<checkpoint>/`, sin sobrescribir resultados existentes. `--bootstrap 0` omite el intervalo de confianza.

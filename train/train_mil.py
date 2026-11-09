@@ -107,7 +107,7 @@ def read_embeddings(path, input_dim):
 class Bags(Dataset):
     """One patient / one WSI per bag. HDF5 is the persistent embedding cache."""
 
-    def __init__(self, cases, labels, folder, input_dim, cache_in_ram=False, cache_workers=8):
+    def __init__(self, cases, labels, folder, input_dim, cache_in_ram=False, cache_workers=16):
         self.cases, self.labels, self.folder = cases, labels, folder
         self.input_dim, self.cache = input_dim, {}
         if cache_in_ram:
@@ -208,7 +208,7 @@ def main():
     parser.add_argument("--workers", type=int, default=0)
     parser.add_argument("--cache-in-ram", action="store_true")
     parser.add_argument(
-        "--cache-workers", type=int, default=8, help="Parallel RAM preload readers (default: 8)"
+        "--cache-workers", type=int, default=16, help="Parallel RAM preload readers (default: 16)"
     )
     parser.add_argument("--device", default="cuda:0")
     args = parser.parse_args()

@@ -2,10 +2,12 @@
 """Train a survival MIL head from cached WSI embeddings and a patient split TXT."""
 
 import argparse
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 import csv
 import hashlib
 import json
 import math
+import multiprocessing
 import os
 from pathlib import Path
 import random
@@ -84,37 +86,89 @@ class MIL(nn.Module):
         return self.head(bag).unsqueeze(0)
 
 
+def read_embeddings(path, input_dim):
+    with h5py.File(path, "r") as file:
+        features = file["embeddings"]
+        if (
+            not file.attrs.get("complete", False)
+            or file.attrs.get("n_written") != len(features)
+            or len(features.shape) != 2
+            or features.shape[1] != input_dim
+            or not len(features)
+        ):
+            raise ValueError(f"Incomplete or incompatible embeddings: {path}")
+        values = features[:]
+    if not np.isfinite(values).all():
+        raise ValueError(f"Nonfinite embeddings: {path}")
+    return values
+
+
 class Bags(Dataset):
     """One patient / one WSI per bag. HDF5 is the persistent embedding cache."""
 
-    def __init__(self, cases, labels, folder, input_dim, cache_in_ram=False):
+    def __init__(self, cases, labels, folder, input_dim, cache_in_ram=False, cache_workers=4):
         self.cases, self.labels, self.folder = cases, labels, folder
         self.input_dim, self.cache = input_dim, {}
         if cache_in_ram:
-            for number, case in enumerate(cases, 1):
-                self.cache[case] = self.read(case)
-                if number % 25 == 0 or number == len(cases):
-                    print(f"RAM cache: {number}/{len(cases)} WSI", flush=True)
+            self.preload(cache_workers)
+
+    def preload(self, workers):
+        # Processes give each reader its own HDF5 lock; threads share h5py's lock.
+        tasks = [(case, self.folder / f"{Path(case).stem}.h5") for case in self.cases]
+        sizes = {case: path.stat().st_size for case, path in tasks}
+        total = sum(sizes.values())
+        loaded = source_loaded = 0
+        started = last_log = time.monotonic()
+        print(f"RAM cache: {len(tasks)} WSI, ~{total / 1e9:.2f} GB, {workers} readers", flush=True)
+
+        def store(case, values):
+            nonlocal loaded, source_loaded, last_log
+            self.cache[case] = torch.from_numpy(values)
+            loaded += values.nbytes
+            source_loaded += sizes[case]
+            now = time.monotonic()
+            if now - last_log >= 10 or len(self.cache) == len(tasks):
+                elapsed = max(now - started, 1e-9)
+                remaining = elapsed * (total - source_loaded) / max(source_loaded, 1)
+                minutes, seconds = divmod(round(remaining), 60)
+                print(
+                    f"RAM cache: {len(self.cache)}/{len(tasks)} WSI; {loaded / 1e9:.2f} GB; "
+                    f"{loaded / elapsed / 1e9:.3f} GB/s; ETA ~{minutes:02d}:{seconds:02d}",
+                    flush=True,
+                )
+                last_log = now
+
+        if workers == 1:
+            for case, path in tasks:
+                store(case, read_embeddings(path, self.input_dim))
+            return
+        with ProcessPoolExecutor(
+            max_workers=workers, mp_context=multiprocessing.get_context("spawn")
+        ) as pool:
+            iterator = iter(tasks)
+            pending = {}
+
+            def submit_next():
+                item = next(iterator, None)
+                if item is not None:
+                    case, path = item
+                    pending[pool.submit(read_embeddings, path, self.input_dim)] = case
+
+            for _ in range(min(workers, len(tasks))):
+                submit_next()
+            while pending:
+                completed, _ = wait(pending, return_when=FIRST_COMPLETED)
+                for future in completed:
+                    case = pending.pop(future)
+                    store(case, future.result())
+                    submit_next()
 
     def __len__(self):
         return len(self.cases)
 
     def read(self, case):
         path = self.folder / f"{Path(case).stem}.h5"
-        with h5py.File(path, "r") as file:
-            features = file["embeddings"]
-            if (
-                not file.attrs.get("complete", False)
-                or file.attrs.get("n_written") != len(features)
-                or len(features.shape) != 2
-                or features.shape[1] != self.input_dim
-                or not len(features)
-            ):
-                raise ValueError(f"Incomplete or incompatible embeddings: {path}")
-            values = features[:]
-        if not np.isfinite(values).all():
-            raise ValueError(f"Nonfinite embeddings: {path}")
-        return torch.from_numpy(values)
+        return torch.from_numpy(read_embeddings(path, self.input_dim))
 
     def __getitem__(self, index):
         case = self.cases[index]
@@ -152,11 +206,15 @@ def main():
     parser.add_argument("--accumulation", type=int, default=8)
     parser.add_argument("--workers", type=int, default=0)
     parser.add_argument("--cache-in-ram", action="store_true")
+    parser.add_argument(
+        "--cache-workers", type=int, default=4, help="Parallel RAM preload readers (default: 4)"
+    )
     parser.add_argument("--device", default="cuda:0")
     args = parser.parse_args()
     if (
         min(args.epochs, args.input_dim, args.hidden_dim, args.bins, args.accumulation) < 1
         or args.workers < 0
+        or args.cache_workers < 1
         or not 0 <= args.dropout < 1
         or not 0 < args.lr < math.inf
         or not 0 <= args.weight_decay < math.inf
@@ -229,7 +287,11 @@ def main():
     (args.output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
     loaders = {}
     for group in ("train", "val"):
-        dataset = Bags(groups[group], labels, args.embeddings, args.input_dim, args.cache_in_ram)
+        if args.cache_in_ram:
+            print(f"Loading {group} embeddings into RAM", flush=True)
+        dataset = Bags(
+            groups[group], labels, args.embeddings, args.input_dim, args.cache_in_ram, args.cache_workers
+        )
         loaders[group] = DataLoader(
             dataset,
             batch_size=None,

@@ -196,6 +196,8 @@ def main():
     for flag in ("labels", "split", "embeddings", "output"):
         parser.add_argument("--" + flag, type=Path, required=True)
     parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument("--patience", type=int, default=5,
+                        help="Stop after this many epochs without a higher val C-index; 0 disables")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--input-dim", type=int, default=2048)
     parser.add_argument("--hidden-dim", type=int, default=256)
@@ -214,6 +216,7 @@ def main():
     args = parser.parse_args()
     if (
         min(args.epochs, args.input_dim, args.hidden_dim, args.bins, args.accumulation) < 1
+        or args.patience < 0
         or args.workers < 0
         or args.cache_workers < 1
         or not 0 <= args.dropout < 1
@@ -308,6 +311,7 @@ def main():
             **(dict(multiprocessing_context="spawn") if args.workers else {}),
         )
     print(f"Time boundaries (train only): {cuts.tolist()}; device={device}", flush=True)
+    best_c_index, best_epoch, stale_epochs = -math.inf, None, 0
     with (args.output / "metrics.csv").open("w", newline="") as file:
         writer = csv.DictWriter(
             file, fieldnames=["epoch", "train_loss", "val_loss", "val_c_index", "seconds"]
@@ -388,7 +392,16 @@ def main():
             writer.writerow(metrics)
             file.flush()
             print(json.dumps(metrics), flush=True)
-    print(f"Finished: {args.output}. All epochs saved; no best selected and no test evaluation.", flush=True)
+            if math.isfinite(c_index) and c_index > best_c_index:
+                best_c_index, best_epoch, stale_epochs = c_index, epoch, 0
+            else:
+                stale_epochs += 1
+            if args.patience and stale_epochs >= args.patience:
+                print(f"Early stopping: {stale_epochs} epochs without a higher validation C-index. "
+                      f"Best epoch: {best_epoch}; C-index: {best_c_index}.", flush=True)
+                break
+    print(f"Finished: {args.output}. All completed epochs saved; "
+          f"best validation C-index epoch: {best_epoch}; no test evaluation.", flush=True)
 
 
 if __name__ == "__main__":

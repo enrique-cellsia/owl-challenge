@@ -28,8 +28,6 @@ Cada WSI genera un HDF5 con vectores `[N,2048]` FP16, coordenadas y fracción de
 
 Para una sola WSI: `python train/extract_wsi_embeddings.py --help`; `--plan-only` cuenta parches sin extraer embeddings. Datos, pesos y entornos locales quedan fuera de Git.
 
-Pruebas: `python -m unittest discover -s train/tests -v`.
-
 ## Entrenamiento
 
 Desde la raíz del repositorio, con `.venv` activado y los requirements instalados:

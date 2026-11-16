@@ -65,7 +65,7 @@ Una vez elegido el mejor checkpoint en validación, `evaluate_test.py` genera ú
 
 ```bash
 python train/evaluate_test.py \
-  --checkpoint data/training/experiments/baseline_v1/split_0/checkpoints/best.pt \
+  --checkpoint data/training/experiments/baseline/split_0/checkpoints/best.pt \
   --device cuda:0
 ```
 
@@ -74,7 +74,7 @@ Repetir para `split_1` con su checkpoint seleccionado. El scorer común usa CPU,
 ```bash
 python train/score.py \
   --benchmark data/training/benchmark_v1 \
-  --experiment data/training/experiments/baseline_v1
+  --experiment data/training/experiments/baseline
 ```
 
-Guarda `metrics.json`, `bootstrap.csv` y `leaderboard_row.csv` en `<experimento>/scoring/`, que debe ser una carpeta nueva. La puntuación oficial debe recalcularse con una revisión fija del scorer común.
+Guarda los resultados de evaluación en `<experimento>/scoring/`, sin sobrescribir resultados anteriores.

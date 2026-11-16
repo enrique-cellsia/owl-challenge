@@ -30,7 +30,7 @@ Para una sola WSI: `python train/extract_wsi_embeddings.py --help`; `--plan-only
 
 Pruebas: `python -m unittest discover -s train/tests -v`.
 
-## Split y entrenamiento
+## Entrenamiento
 
 Desde la raíz del repositorio, con `.venv` activado y los requirements instalados:
 
@@ -39,11 +39,11 @@ python train/train_mil.py \
   --labels data/data/raw/labels/training_labels.csv \
   --split data/training/benchmark_v1/split_0.txt \
   --embeddings data/data/processed/embeddings/hibou_l/10x_native_224_stride224_tissue005 \
-  --output "data/training/experiments/hibou_l_10x_mil_$(date +%Y%m%d_%H%M%S)" \
+  --output data/training/experiments/mi_experimento/split_0 \
   --device cuda:0 --epochs 30 --seed 42 --cache-in-ram
 ```
 
-Usar las dos particiones oficiales 60/20/20 de `data/training/benchmark_v1/`, sin regenerarlas ni modificarlas. Sus conjuntos de test no se solapan. El ejemplo entrena la partición 0; repetir con `split_1.txt` y otra carpeta de salida.
+Usar las dos particiones oficiales 60/20/20 de `data/training/benchmark_v1/`, sin regenerarlas ni modificarlas. Sus conjuntos de test no se solapan. Sustituir `mi_experimento` por el nombre del experimento. El ejemplo entrena la partición 0; repetir con `split_1.txt` y salida `data/training/experiments/mi_experimento/split_1`.
 
 El entrenamiento lee los HDF5 existentes: no extrae embeddings ni necesita las WSI originales. `--cache-in-ram` mantiene train y validación en RAM (aproximadamente 39 GB de vectores FP16 para este dataset, más memoria de trabajo); omitirlo para leer del disco en cada época. La precarga usa dieciséis lectores por defecto, ajustables con `--cache-workers`. Por defecto usa todos los parches de cada WSI, una WSI por paso y acumula gradientes de ocho pacientes.
 
@@ -59,7 +59,7 @@ Una vez elegido el mejor checkpoint en validación, `evaluate_test.py` genera ú
 
 ```bash
 python train/evaluate_test.py \
-  --checkpoint data/training/experiments/baseline/split_0/checkpoints/best.pt \
+  --checkpoint data/training/experiments/mi_experimento/split_0/checkpoints/best.pt \
   --device cuda:0
 ```
 
@@ -68,7 +68,7 @@ Repetir para `split_1` con su checkpoint seleccionado. El scorer común usa CPU,
 ```bash
 python train/score.py \
   --benchmark data/training/benchmark_v1 \
-  --experiment data/training/experiments/baseline
+  --experiment data/training/experiments/mi_experimento
 ```
 
 Guarda los resultados de evaluación en `<experimento>/scoring/`, sin sobrescribir resultados anteriores.

@@ -11,8 +11,7 @@ import time
 import numpy as np
 import torch
 
-from make_split import read_labels, read_split
-from train_mil import Bags, MIL, survival_and_risk
+from train_mil import Bags, MIL, read_labels, read_split, survival_and_risk
 
 
 def main():

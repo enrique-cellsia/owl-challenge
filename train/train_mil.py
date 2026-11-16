@@ -22,7 +22,41 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
-from make_split import read_labels, read_split
+
+
+def read_labels(path):
+    labels = {}
+    with Path(path).open(newline="") as file:
+        for row in csv.DictReader(file):
+            case, event, duration = row["case_id"], int(row["event"]), float(row["follow_up_years"])
+            if case in labels or event not in (0, 1) or not math.isfinite(duration) or duration <= 0:
+                raise ValueError(f"Duplicate patient or invalid survival label: {case}")
+            labels[case] = dict(event=event, follow_up_years=duration)
+    if not labels:
+        raise ValueError("No patients in labels CSV")
+    return labels
+
+
+def read_split(path, labels):
+    split = {}
+    with Path(path).open() as file:
+        lines = [line.split() for line in file if line.strip() and not line.lstrip().startswith("#")]
+    if not lines or lines[0] != ["case_id", "split"]:
+        raise ValueError("Split TXT must start with 'case_id split' (tabs or spaces)")
+    for fields in lines[1:]:
+        if len(fields) != 2:
+            raise ValueError(f"Expected case_id and split: {fields}")
+        case, group = fields
+        if case in split or group not in ("train", "val", "test"):
+            raise ValueError(f"Duplicate patient or invalid split: {case}")
+        split[case] = group
+    if set(split) != set(labels):
+        raise ValueError("Split must assign every patient in the labels CSV exactly once")
+    if set(split.values()) != {"train", "val", "test"}:
+        raise ValueError("Train, val and test must all be nonempty")
+    if len({Path(case).stem for case in split}) != len(split):
+        raise ValueError("Case IDs must have unique filename stems")
+    return split
 
 
 def time_cuts(records, bins):
@@ -273,11 +307,14 @@ def main():
     predictions.mkdir()
     shutil.copyfile(args.split, args.output / "split.txt")
     shutil.copyfile(args.labels, args.output / "labels.csv")
-    shutil.copyfile(__file__, args.output / "train_mil.py")
-    shutil.copyfile(Path(__file__).with_name("make_split.py"), args.output / "make_split.py")
-    shutil.copyfile(
-        Path(__file__).resolve().parents[1] / "requirements.txt", args.output / "requirements.txt"
-    )
+    source = args.output / "source"
+    source.mkdir()
+    shutil.copyfile(__file__, source / "train_mil.py")
+    shutil.copyfile(Path(__file__).with_name("evaluate_test.py"), source / "evaluate_test.py")
+    requirements = Path(__file__).with_name("requirements.txt")
+    if not requirements.is_file():
+        requirements = Path(__file__).resolve().parents[1] / "requirements.txt"
+    shutil.copyfile(requirements, source / "requirements.txt")
     config = {
         key: str(value.resolve()) if isinstance(value, Path) else value for key, value in vars(args).items()
     }

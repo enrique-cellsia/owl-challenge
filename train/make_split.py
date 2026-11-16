@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 
 
+
 def read_labels(path):
     labels = {}
     with Path(path).open(newline="") as file:

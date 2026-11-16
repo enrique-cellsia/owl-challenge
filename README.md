@@ -35,12 +35,6 @@ Pruebas: `python -m unittest discover -s train/tests -v`.
 Desde la raíz del repositorio, con `.venv` activado y los requirements instalados:
 
 ```bash
-python train/make_split.py \
-  --labels data/data/raw/labels/training_labels.csv \
-  --output data/training/benchmark_v5 --seed 42
-```
-
-```bash
 python train/train_mil.py \
   --labels data/data/raw/labels/training_labels.csv \
   --split data/training/benchmark_v1/split_0.txt \
@@ -49,7 +43,7 @@ python train/train_mil.py \
   --device cuda:0 --epochs 30 --seed 42 --cache-in-ram
 ```
 
-El primer comando crea dos particiones fijas 60/20/20, estratificadas por `event`, con tests sin solapamiento: `split_0.txt` y `split_1.txt`. Guarda además `protocol.json` con info adicional. El benchmark oficial ya está generado: usar sus TXT sin regenerarlos. El ejemplo entrena la partición 0; repetir con `split_1.txt` y otra carpeta de salida.
+Usar las dos particiones oficiales 60/20/20 de `data/training/benchmark_v1/`, sin regenerarlas ni modificarlas. Sus conjuntos de test no se solapan. El ejemplo entrena la partición 0; repetir con `split_1.txt` y otra carpeta de salida.
 
 El entrenamiento lee los HDF5 existentes: no extrae embeddings ni necesita las WSI originales. `--cache-in-ram` mantiene train y validación en RAM (aproximadamente 39 GB de vectores FP16 para este dataset, más memoria de trabajo); omitirlo para leer del disco en cada época. La precarga usa dieciséis lectores por defecto, ajustables con `--cache-workers`. Por defecto usa todos los parches de cada WSI, una WSI por paso y acumula gradientes de ocho pacientes.
 

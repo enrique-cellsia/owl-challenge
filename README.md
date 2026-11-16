@@ -37,19 +37,19 @@ Desde la raíz del repositorio, con `.venv` activado y los requirements instalad
 ```bash
 python train/make_split.py \
   --labels data/data/raw/labels/training_labels.csv \
-  --output data/training/splits/60_20_20_seed42.txt --seed 42
+  --output data/training/benchmark_v5 --seed 42
 ```
 
 ```bash
 python train/train_mil.py \
   --labels data/data/raw/labels/training_labels.csv \
-  --split data/training/splits/60_20_20_seed42.txt \
+  --split data/training/benchmark_v1/split_0.txt \
   --embeddings data/data/processed/embeddings/hibou_l/10x_native_224_stride224_tissue005 \
   --output "data/training/experiments/hibou_l_10x_mil_$(date +%Y%m%d_%H%M%S)" \
   --device cuda:0 --epochs 30 --seed 42 --cache-in-ram
 ```
 
-El primer comando genera un TXT tabulado con cabecera `case_id split`, una fila por paciente y valores `train`, `val` o `test`. Divide por paciente, estratifica por `event` y fija 305/102/101 pacientes para las 508 WSI actuales. Ordena los IDs antes de dividir; no sobrescribe un TXT existente. La semilla del split y la del entrenamiento son independientes.
+El primer comando crea dos particiones fijas 60/20/20, estratificadas por `event`, con tests sin solapamiento: `split_0.txt` y `split_1.txt`. Guarda además `protocol.json` con info adicional. El benchmark oficial ya está generado: usar sus TXT sin regenerarlos. El ejemplo entrena la partición 0; repetir con `split_1.txt` y otra carpeta de salida.
 
 El entrenamiento lee los HDF5 existentes: no extrae embeddings ni necesita las WSI originales. `--cache-in-ram` mantiene train y validación en RAM (aproximadamente 39 GB de vectores FP16 para este dataset, más memoria de trabajo); omitirlo para leer del disco en cada época. La precarga usa dieciséis lectores por defecto, ajustables con `--cache-workers`. Por defecto usa todos los parches de cada WSI, una WSI por paso y acumula gradientes de ocho pacientes.
 
@@ -57,7 +57,7 @@ La base es MIL con atención y cuatro probabilidades condicionales de recaída, 
 
 `--input-dim`, `--hidden-dim`, `--bins`, `--pooling attention|mean`, `--dropout`, `--lr`, `--weight-decay`, `--accumulation` y `--seed` permiten variar el modelo y el entrenamiento. Para otro encoder, indicar su carpeta de HDF5 y su dimensión con `--input-dim`.
 
-Los splits y los experimentos se agrupan en `data/training/`, dentro del almacenamiento externo ignorado por Git. Los experimentos quedan en `data/training/experiments/`. Cada ejecución requiere una carpeta nueva y conserva configuración, copia de split/etiquetas/código, `metrics.csv`, predicciones de validación y **todos** los checkpoints por época (modelo y optimizador). No selecciona `best` ni carga embeddings o evalúa pacientes de test. Los TXT de split quedan en `data/training/splits/`. Todos los artefactos persistentes generados (splits, embeddings, checkpoints, métricas, predicciones y cachés de ejecución) se guardan bajo `data/`, la carpeta montada, y quedan fuera de Git.
+Los splits y los experimentos se agrupan en `data/training/`, dentro del almacenamiento externo ignorado por Git. Los experimentos quedan en `data/training/experiments/`. Cada ejecución requiere una carpeta nueva y conserva configuración, copia de split/etiquetas/código, `metrics.csv`, predicciones de validación y **todos** los checkpoints por época (modelo y optimizador). No selecciona `best` ni carga embeddings o evalúa pacientes de test. Los TXT del benchmark quedan en `data/training/benchmark_v1/`. Todos los artefactos persistentes generados (splits, embeddings, checkpoints, métricas, predicciones y cachés de ejecución) se guardan bajo `data/`, la carpeta montada, y quedan fuera de Git.
 
 ## Evaluación en test
 

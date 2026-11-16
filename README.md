@@ -59,14 +59,22 @@ La base es MIL con atención y cuatro probabilidades condicionales de recaída, 
 
 Los splits y los experimentos se agrupan en `data/training/`, dentro del almacenamiento externo ignorado por Git. Cada experimento tiene su carpeta en `data/training/experiments/`. El entrenamiento de ejemplo conserva los checkpoints de cada época para seleccionar después el modelo y usa early stopping de cinco épocas sin mejorar el C-index de validación (`--patience 5`; `0` lo desactiva); esta configuración puede variar entre experimentos. No evalúa pacientes de test. Los TXT del benchmark quedan en `data/training/benchmark_v1/`. Todos los artefactos persistentes generados (splits, embeddings, checkpoints, métricas, predicciones y cachés de ejecución) se guardan bajo `data/`, la carpeta montada, y quedan fuera de Git.
 
-## Evaluación en test
+## Predicciones y scoring
 
-Elegir el checkpoint usando validación y pasarlo explícitamente:
+Una vez elegido el mejor checkpoint en validación, `evaluate_test.py` genera únicamente `predictions.csv` (`case_id,risk`) y un JSON de procedencia en la carpeta de la ejecución; no calcula métricas ni sobrescribe archivos. Ejemplo para la partición 0:
 
 ```bash
 python train/evaluate_test.py \
-  --checkpoint data/training/experiments/hibou_l_10x_mil_20261109_094734/checkpoints/epoch_002.pt \
-  --device cuda:0 --cache-in-ram
+  --checkpoint data/training/experiments/baseline_v1/split_0/checkpoints/best.pt \
+  --device cuda:0
 ```
 
-Reutiliza etiquetas, split, arquitectura y cortes temporales guardados. Escribe pérdida, C-index de Harrell (con IC del 95 % calculado por bootstrap de pacientes) y predicciones en `<experimento>/test/<checkpoint>/`, sin sobrescribir resultados existentes. `--bootstrap 0` omite el intervalo de confianza.
+Repetir para `split_1` con su checkpoint seleccionado. El scorer común usa CPU, verifica los hashes oficiales del benchmark y los pacientes de ambos CSV, y calcula Harrell por partición, su media y el IC del 95 % mediante 1.000 réplicas bootstrap conjuntas, remuestreando dentro de cada test. El IC está condicionado a los modelos entrenados.
+
+```bash
+python train/score.py \
+  --benchmark data/training/benchmark_v1 \
+  --experiment data/training/experiments/baseline_v1
+```
+
+Guarda `metrics.json`, `bootstrap.csv` y `leaderboard_row.csv` en `<experimento>/scoring/`, que debe ser una carpeta nueva. La puntuación oficial debe recalcularse con una revisión fija del scorer común.
